@@ -300,8 +300,8 @@ function NumberField({ label, value, onChange, step = 1, suffix = "" }) {
   );
 }
 
-export default function App() {
-  const [p, setP] = useState({
+const STORAGE_KEY = "simulazione-pensione-v1";
+const DEFAULT_PARAMS = {
     currentAge: 26,
     retireAge: 48,
     renditaAge: 68,
@@ -339,7 +339,63 @@ export default function App() {
       { id: 1, startAge: 32, endAge: 50, type: "abs", value: 4000, label: "Intervallo 1", linkPac: true, reduzionePct: 100 },
       { id: 2, startAge: 51, endAge: 60, type: "abs", value: 4000, label: "Intervallo 2", linkPac: true, reduzionePct: 100 },
     ],
-  });
+};
+
+function loadInitialParams() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return { ...DEFAULT_PARAMS, ...JSON.parse(saved) };
+  } catch (e) {
+    // localStorage non disponibile o JSON corrotto: si riparte dai default, senza errori bloccanti
+  }
+  return DEFAULT_PARAMS;
+}
+
+export default function App() {
+  const [p, setP] = useState(loadInitialParams);
+  const [importError, setImportError] = useState("");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+    } catch (e) {
+      // storage pieno o non disponibile: si continua comunque, solo senza salvataggio automatico
+    }
+  }, [p]);
+
+  const esportaJson = () => {
+    const blob = new Blob([JSON.stringify(p, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `simulazione-pensione-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importaJson = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        setP({ ...DEFAULT_PARAMS, ...parsed });
+        setImportError("");
+      } catch (err) {
+        setImportError("File non valido: assicurati di aver selezionato un JSON esportato da questo simulatore.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const resetDefault = () => {
+    if (window.confirm("Ripristinare tutti i valori di default? Le modifiche attuali andranno perse (a meno di averle esportate).")) {
+      setP(DEFAULT_PARAMS);
+    }
+  };
+
   const set = (k) => (v) => setP((prev) => ({ ...prev, [k]: v }));
   const addSpesaExtra = () => setP((prev) => ({
     ...prev,
@@ -427,6 +483,20 @@ export default function App() {
 
       <h1>Simulazione pensione anticipata</h1>
       <p className="sub">Rendimenti reali (al netto inflazione) · valori in potere d'acquisto di oggi · portafoglio a ribilanciamento automatico</p>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18, fontFamily: "Helvetica Neue, Arial, sans-serif" }}>
+        <button onClick={esportaJson} style={{ border: "1px solid #12332C", background: "#12332C", color: "#F5F3EE", borderRadius: 3, padding: "7px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          ⬇ Esporta JSON
+        </button>
+        <label style={{ border: "1px solid #12332C", background: "#F5F3EE", color: "#12332C", borderRadius: 3, padding: "7px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          ⬆ Importa JSON
+          <input type="file" accept="application/json" onChange={importaJson} style={{ display: "none" }} />
+        </label>
+        <button onClick={resetDefault} style={{ border: "1px solid #D9D3C4", background: "#FBFAF6", color: "#8B3A2B", borderRadius: 3, padding: "7px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          ↺ Ripristina default
+        </button>
+      </div>
+      {importError && <div className="note" style={{ borderLeftColor: "#8B3A2B", color: "#8B3A2B" }}>{importError}</div>}
 
       <div className="verdict">
         <div>
